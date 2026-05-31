@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+function getSupabase() {
+  const { createClient } = require('@supabase/supabase-js')
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  )
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +17,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/study?payment=failed', req.url))
     }
 
-    // Verify with Paystack
     const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
       headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
     })
@@ -24,19 +25,20 @@ export async function GET(req: NextRequest) {
 
     if (data.status && data.data.status === 'success') {
       const ip = data.data.metadata?.ip_address || 'unknown'
-
-      // Save payment to Supabase with 7-day expiry
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + 7)
 
-      await supabase.from('payments').insert({
-        ip_address: ip,
-        reference,
-        amount: data.data.amount,
-        status: 'success',
-        expires_at: expiresAt.toISOString(),
-        created_at: new Date().toISOString(),
-      })
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        const supabase = getSupabase()
+        await supabase.from('payments').insert({
+          ip_address: ip,
+          reference,
+          amount: data.data.amount,
+          status: 'success',
+          expires_at: expiresAt.toISOString(),
+          created_at: new Date().toISOString(),
+        })
+      }
 
       return NextResponse.redirect(new URL('/study?payment=success', req.url))
     }
