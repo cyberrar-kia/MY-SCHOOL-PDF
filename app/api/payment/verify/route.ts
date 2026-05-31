@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-function getSupabase() {
-  const { createClient } = require('@supabase/supabase-js')
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-  )
-}
-
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -24,23 +16,18 @@ export async function GET(req: NextRequest) {
     const data = await response.json()
 
     if (data.status && data.data.status === 'success') {
-      const ip = data.data.metadata?.ip_address || 'unknown'
-      const expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + 7)
+      const redirectUrl = new URL('/study?payment=success', req.url)
+      const res = NextResponse.redirect(redirectUrl)
 
-      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-        const supabase = getSupabase()
-        await supabase.from('payments').insert({
-          ip_address: ip,
-          reference,
-          amount: data.data.amount,
-          status: 'success',
-          expires_at: expiresAt.toISOString(),
-          created_at: new Date().toISOString(),
-        })
-      }
+      // Set 7-day payment cookie
+      res.cookies.set('paid_access', 'true', {
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: '/',
+        sameSite: 'lax',
+        httpOnly: true,
+      })
 
-      return NextResponse.redirect(new URL('/study?payment=success', req.url))
+      return res
     }
 
     return NextResponse.redirect(new URL('/study?payment=failed', req.url))
